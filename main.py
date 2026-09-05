@@ -1,84 +1,29 @@
-
-# ======================================================
-# SENTRIPRINT - BACKEND API
-# ======================================================
-
-# FastAPI is the framework we are using to build
-# our SentriPrint backend.
 from fastapi import FastAPI, HTTPException
-
-# Pydantic is used to define and validate the data
-# that our API receives.
 from pydantic import BaseModel
-
-# SQLite is the database we are using for SentriPrint.
 import sqlite3
-
-# datetime allows us to record the exact time
-# an event happens.
 from datetime import datetime
-
-# Optional allows some fields to be optional.
 from typing import Optional
-
-
-# ======================================================
-# CREATE THE FASTAPI APPLICATION
-# ======================================================
-
-# Create our FastAPI application.
-#
-# IMPORTANT:
-# This variable must be called "app".
-#
-# Uvicorn will look for this variable when we run:
-#
-# py -m uvicorn main:app --reload
 
 app = FastAPI()
 
-
-# ======================================================
-# DATABASE CONFIGURATION
-# ======================================================
-
-# Name of our SQLite database file.
 DATABASE = "sentriprint.db"
 
+# Tracks whether an attendance period is currently open.
+attendance_active = False
 
-# ======================================================
-# DATABASE SETUP
-# ======================================================
+# Stores when the current attendance period started.
+attendance_start_time = None
+
+# Stores students who have already attended in the
+# current attendance period to prevent duplicates.
+current_attendees = set()
+
 
 def create_database():
-
-    # Connect to the SQLite database.
-    #
-    # If the database does not exist, SQLite will
-    # automatically create it.
     connection = sqlite3.connect(DATABASE)
-
-    # Create a cursor.
-    #
-    # The cursor is what we use to execute SQL commands.
     cursor = connection.cursor()
 
-
-    # ==================================================
-    # STUDENTS TABLE
-    # ==================================================
-    #
-    # This table contains information about registered
-    # students.
-    #
-    # Example:
-    #
-    # student_id      CPE/24/001
-    # name            John Doe
-    # department      Computer Engineering
-    # level           200
-    # fingerprint_id  1
-
+    # Stores registered students and their fingerprints.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,17 +36,7 @@ def create_database():
         )
     """)
 
-
-    # ==================================================
-    # ATTENDANCE TABLE
-    # ==================================================
-    #
-    # This table stores every time a student records
-    # attendance.
-    #
-    # One student can therefore have MANY attendance
-    # records.
-
+    # Stores attendance records.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,105 +47,104 @@ def create_database():
         )
     """)
 
-
-    # Save the database changes.
     connection.commit()
-
-    # Close the database connection.
     connection.close()
 
 
-# Run the database setup when the API starts.
 create_database()
 
 
-# ======================================================
-# DATA MODELS
-# ======================================================
-
-# ------------------------------------------------------
-# STUDENT MODEL
-# ------------------------------------------------------
-#
-# This defines the information required when registering
-# a student.
-
 class Student(BaseModel):
-
-    # Student's matriculation/registration number.
     student_id: str
-
-    # Student's full name.
     name: str
-
-    # Student's department.
-    # Optional because we may not always have it.
     department: Optional[str] = None
-
-    # Student's academic level.
-    # Optional because we may not always have it.
     level: Optional[int] = None
-
-    # ID of the fingerprint stored inside the AS608.
-    # Optional during registration for now.
     fingerprint_id: Optional[int] = None
 
 
-# ------------------------------------------------------
-# ATTENDANCE MODEL
-# ------------------------------------------------------
-#
-# This defines the information that will eventually
-# be sent by the ESP32 to record attendance.
-
 class Attendance(BaseModel):
-
-    # Student associated with the fingerprint.
     student_id: str
-
-    # Fingerprint ID returned by the fingerprint sensor.
     fingerprint_id: int
-
-    # Unique identifier for the SentriPrint device.
     device_id: str
 
 
-# ======================================================
-# HOME ENDPOINT
-# ======================================================
-
-# GET /
-#
-# This endpoint simply confirms that the API is alive.
-
 @app.get("/")
 def home():
-
     return {
         "message": "SentriPrint API is working"
     }
 
 
-# ======================================================
-# REGISTER A STUDENT
-# ======================================================
+@app.post("/attendance/start")
+def start_attendance():
+    global attendance_active
+    global attendance_start_time
+    global current_attendees
 
-# POST /students
-#
-# This endpoint registers a new student in our database.
+    if attendance_active:
+        raise HTTPException(
+            status_code=409,
+            detail="Attendance is already active"
+        )
+
+    attendance_active = True
+    attendance_start_time = datetime.now().isoformat()
+
+    # Start a fresh attendance period.
+    current_attendees.clear()
+
+    return {
+        "status": "success",
+        "message": "Attendance started",
+        "started_at": attendance_start_time
+    }
+
+
+@app.post("/attendance/stop")
+def stop_attendance():
+    global attendance_active
+    global attendance_start_time
+    global current_attendees
+
+    if not attendance_active:
+        raise HTTPException(
+            status_code=409,
+            detail="Attendance is not currently active"
+        )
+
+    stopped_at = datetime.now().isoformat()
+    total_attendees = len(current_attendees)
+
+    attendance_active = False
+    attendance_start_time = None
+
+    # Clear the list so the next period starts fresh.
+    current_attendees.clear()
+
+    return {
+        "status": "success",
+        "message": "Attendance stopped",
+        "stopped_at": stopped_at,
+        "total_attendees": total_attendees
+    }
+
+
+@app.get("/attendance/status")
+def attendance_status():
+    return {
+        "status": "success",
+        "attendance_active": attendance_active,
+        "started_at": attendance_start_time,
+        "students_recorded": len(current_attendees)
+    }
+
 
 @app.post("/students")
 def register_student(student: Student):
-
-    # Connect to the database.
     connection = sqlite3.connect(DATABASE)
-
-    # Create a cursor.
     cursor = connection.cursor()
 
     try:
-
-        # Insert the student into the students table.
         cursor.execute("""
             INSERT INTO students (
                 student_id,
@@ -230,10 +164,8 @@ def register_student(student: Student):
             datetime.now().isoformat()
         ))
 
-        # Save the changes.
         connection.commit()
 
-        # Return a successful response.
         return {
             "status": "success",
             "message": "Student registered successfully",
@@ -241,38 +173,20 @@ def register_student(student: Student):
         }
 
     except sqlite3.IntegrityError:
-
-        # This error occurs when a student_id or
-        # fingerprint_id already exists.
         raise HTTPException(
             status_code=409,
             detail="Student ID or Fingerprint ID already exists"
         )
 
     finally:
-
-        # Always close the database connection.
         connection.close()
 
 
-# ======================================================
-# GET ALL STUDENTS
-# ======================================================
-
-# GET /students
-#
-# This endpoint returns every registered student.
-
 @app.get("/students")
 def get_students():
-
-    # Connect to the database.
     connection = sqlite3.connect(DATABASE)
-
-    # Create a cursor.
     cursor = connection.cursor()
 
-    # Select all students.
     cursor.execute("""
         SELECT
             id,
@@ -286,20 +200,12 @@ def get_students():
         ORDER BY id DESC
     """)
 
-    # Retrieve all rows.
     rows = cursor.fetchall()
-
-    # Close the database connection.
     connection.close()
 
-
-    # Create an empty list for our students.
     students = []
 
-
-    # Convert each database row into a dictionary.
     for row in rows:
-
         students.append({
             "id": row[0],
             "student_id": row[1],
@@ -310,8 +216,6 @@ def get_students():
             "created_at": row[6]
         })
 
-
-    # Return the students.
     return {
         "status": "success",
         "count": len(students),
@@ -319,32 +223,28 @@ def get_students():
     }
 
 
-# ======================================================
-# RECORD ATTENDANCE
-# ======================================================
-
-# POST /attendance
-#
-# This endpoint records attendance.
-#
-# Eventually, the ESP32 will send this information
-# after the AS608 successfully identifies a fingerprint.
-
 @app.post("/attendance")
 def record_attendance(attendance: Attendance):
 
-    # Connect to the database.
-    connection = sqlite3.connect(DATABASE)
+    # Attendance can only be recorded during an
+    # active attendance period.
+    if not attendance_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Attendance is currently closed"
+        )
 
-    # Create a cursor.
+    # Prevent the same student from attending twice
+    # during the current attendance period.
+    if attendance.student_id in current_attendees:
+        raise HTTPException(
+            status_code=409,
+            detail="Student has already recorded attendance for this period"
+        )
+
+    connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
-
-    # ==================================================
-    # CHECK WHETHER THE STUDENT EXISTS
-    # ==================================================
-
-    # Search for the student using their student ID.
     cursor.execute("""
         SELECT
             student_id,
@@ -356,14 +256,9 @@ def record_attendance(attendance: Attendance):
         attendance.student_id,
     ))
 
-    # Get the matching student.
     student = cursor.fetchone()
 
-
-    # If the student doesn't exist, don't record
-    # attendance.
     if student is None:
-
         connection.close()
 
         raise HTTPException(
@@ -371,18 +266,10 @@ def record_attendance(attendance: Attendance):
             detail="Student is not registered"
         )
 
-
-    # ==================================================
-    # CHECK FINGERPRINT
-    # ==================================================
-
-    # The fingerprint ID sent by the ESP32 should match
-    # the fingerprint ID registered to the student.
-
+    # Verify that the fingerprint belongs to the student.
     registered_fingerprint_id = student[1]
 
     if registered_fingerprint_id != attendance.fingerprint_id:
-
         connection.close()
 
         raise HTTPException(
@@ -390,18 +277,7 @@ def record_attendance(attendance: Attendance):
             detail="Fingerprint does not match student"
         )
 
-
-    # ==================================================
-    # CREATE ATTENDANCE TIMESTAMP
-    # ==================================================
-
-    # Record the current date and time.
     timestamp = datetime.now().isoformat()
-
-
-    # ==================================================
-    # INSERT ATTENDANCE RECORD
-    # ==================================================
 
     cursor.execute("""
         INSERT INTO attendance (
@@ -418,18 +294,15 @@ def record_attendance(attendance: Attendance):
         timestamp
     ))
 
-
-    # Save the attendance record.
     connection.commit()
 
-    # Get the ID assigned to this attendance record.
     attendance_id = cursor.lastrowid
 
-    # Close the database connection.
     connection.close()
 
+    # Mark the student as present for this period.
+    current_attendees.add(attendance.student_id)
 
-    # Return a successful response.
     return {
         "status": "success",
         "message": "Attendance recorded successfully",
@@ -443,28 +316,10 @@ def record_attendance(attendance: Attendance):
     }
 
 
-# ======================================================
-# GET ALL ATTENDANCE RECORDS
-# ======================================================
-
-# GET /attendance
-#
-# This endpoint returns all attendance records.
-
 @app.get("/attendance")
 def get_attendance():
-
-    # Connect to the database.
     connection = sqlite3.connect(DATABASE)
-
-    # Create a cursor.
     cursor = connection.cursor()
-
-
-    # Retrieve attendance records.
-    #
-    # ORDER BY timestamp DESC means the newest
-    # attendance records appear first.
 
     cursor.execute("""
         SELECT
@@ -477,20 +332,12 @@ def get_attendance():
         ORDER BY timestamp DESC
     """)
 
-    # Get all attendance records.
     rows = cursor.fetchall()
-
-    # Close the database connection.
     connection.close()
 
-
-    # Create an empty list for our records.
     records = []
 
-
-    # Convert each database row into a dictionary.
     for row in rows:
-
         records.append({
             "id": row[0],
             "student_id": row[1],
@@ -499,8 +346,6 @@ def get_attendance():
             "timestamp": row[4]
         })
 
-
-    # Return all attendance records.
     return {
         "status": "success",
         "count": len(records),
