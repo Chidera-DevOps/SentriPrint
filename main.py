@@ -63,10 +63,11 @@ class Student(BaseModel):
 
 
 class Attendance(BaseModel):
-    student_id: str
+    # The fingerprint ID returned by the AS608.
     fingerprint_id: int
-    device_id: str
 
+    # Identifies which SentriPrint device sent the scan.
+    device_id: str
 
 @app.get("/")
 def home():
@@ -99,13 +100,13 @@ def start_attendance():
         "started_at": attendance_start_time
     }
 
-
 @app.post("/attendance/stop")
 def stop_attendance():
     global attendance_active
     global attendance_start_time
     global current_attendees
 
+    # Make sure there is an active attendance session to stop.
     if not attendance_active:
         raise HTTPException(
             status_code=409,
@@ -113,12 +114,17 @@ def stop_attendance():
         )
 
     stopped_at = datetime.now().isoformat()
+
+    # Count everyone who attended this session.
     total_attendees = len(current_attendees)
 
+    # Close the attendance session.
     attendance_active = False
     attendance_start_time = None
 
-    # Clear the list so the next period starts fresh.
+    # Clear the temporary attendee list.
+    # The actual attendance records remain safely stored
+    # in the SQLite database.
     current_attendees.clear()
 
     return {
@@ -128,6 +134,121 @@ def stop_attendance():
         "total_attendees": total_attendees
     }
 
+
+@app.post("/attendance")
+def record_attendance(attendance: Attendance):
+
+    # ---------------------------------------------------------
+    # 1. Make sure an attendance session is currently active.
+    # ---------------------------------------------------------
+    if not attendance_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Attendance is currently closed"
+        )
+
+    # ---------------------------------------------------------
+    # 2. Connect to the database.
+    # ---------------------------------------------------------
+    connection = sqlite3.connect(DATABASE)
+    cursor = connection.cursor()
+
+    try:
+
+        # -----------------------------------------------------
+        # 3. Find the student associated with this fingerprint.
+        #
+        # The ESP32 does NOT send the student's ID.
+        # It only sends the fingerprint ID returned by AS608.
+        # -----------------------------------------------------
+        cursor.execute("""
+            SELECT
+                student_id,
+                fingerprint_id,
+                name
+            FROM students
+            WHERE fingerprint_id = ?
+        """, (
+            attendance.fingerprint_id,
+        ))
+
+        student = cursor.fetchone()
+
+        # -----------------------------------------------------
+        # 4. If no student is associated with that fingerprint,
+        # reject the attendance attempt.
+        # -----------------------------------------------------
+        if student is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Fingerprint is not registered to a student"
+            )
+
+        student_id = student[0]
+        fingerprint_id = student[1]
+        name = student[2]
+
+        # -----------------------------------------------------
+        # 5. Prevent the same student from recording attendance
+        # twice during the same attendance session.
+        # -----------------------------------------------------
+        if student_id in current_attendees:
+            raise HTTPException(
+                status_code=409,
+                detail="Student has already recorded attendance for this period"
+            )
+
+        # -----------------------------------------------------
+        # 6. Create the attendance timestamp.
+        # -----------------------------------------------------
+        timestamp = datetime.now().isoformat()
+
+        # -----------------------------------------------------
+        # 7. Save the attendance record.
+        # -----------------------------------------------------
+        cursor.execute("""
+            INSERT INTO attendance (
+                student_id,
+                fingerprint_id,
+                device_id,
+                timestamp
+            )
+            VALUES (?, ?, ?, ?)
+        """, (
+            student_id,
+            fingerprint_id,
+            attendance.device_id,
+            timestamp
+        ))
+
+        connection.commit()
+
+        attendance_id = cursor.lastrowid
+
+        # -----------------------------------------------------
+        # 8. Mark this student as present for the current
+        # attendance session.
+        # -----------------------------------------------------
+        current_attendees.add(student_id)
+
+        # -----------------------------------------------------
+        # 9. Return the student's information to the ESP32.
+        # -----------------------------------------------------
+        return {
+            "status": "success",
+            "message": "Attendance recorded successfully",
+            "attendance_id": attendance_id,
+            "student": {
+                "student_id": student_id,
+                "name": name,
+                "fingerprint_id": fingerprint_id
+            },
+            "device_id": attendance.device_id,
+            "timestamp": timestamp
+        }
+
+    finally:
+        connection.close()
 
 @app.get("/attendance/status")
 def attendance_status():
