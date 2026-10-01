@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentriPrint Student Attendance</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- =====================================================
+         SIDEBAR
+         ===================================================== -->
+
+    <aside class="sidebar">
+
+      <div class="logo">
+        <div class="logo-icon">✓</div>
+        <span>SentriPrint</span>
+      </div>
+
+      <nav>
+
+        <a href="#" class="nav-item active">
+          <span>▣</span>
+          Dashboard
+        </a>
+
+        <a href="#" class="nav-item">
+          <span>◷</span>
+          Attendance
+        </a>
+
+        <a href="#" class="nav-item">
+          <span>♙</span>
+          Students
+        </a>
+
+        <a href="#" class="nav-item">
+          <span>▤</span>
+          Reports
+        </a>
+
+      </nav>
+
+      <div class="sidebar-bottom">
+
+        <div class="connection-status">
+
+          <span class="status-dot"></span>
+
+          <div>
+            <strong>System Online</strong>
+            <small>Fingerprint server connected</small>
+          </div>
+
+        </div>
+
+      </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         MAIN CONTENT
+         ===================================================== -->
+
+    <main class="main">
+
+      <!-- ===================================================
+           HEADER
+           =================================================== -->
+
+      <header class="header">
+
+        <div>
+
+          <h1>Attendance Dashboard</h1>
+
+          <p>
+            Monitor student attendance in real time.
+          </p>
+
+        </div>
+
+
+        <div class="header-right">
+
+          <!-- Attendance controls -->
+
+          <div class="attendance-controls">
+
+            <button
+              id="startAttendanceBtn"
+              class="control-btn start-btn"
+              type="button"
+            >
+              Start Attendance
+            </button>
+
+            <button
+              id="stopAttendanceBtn"
+              class="control-btn stop-btn"
+              type="button"
+              disabled
+            >
+              Stop
+            </button>
+
+            <button
+              id="resetAttendanceBtn"
+              class="control-btn reset-btn"
+              type="button"
+              disabled
+            >
+              Reset
+            </button>
+
+          </div>
+
+
+          <!-- Date and time -->
+
+          <div class="date">
+
+            <span id="currentDate">
+              Loading...
+            </span>
+
+            <strong id="currentTime">
+              00:00:00
+            </strong>
+
+          </div>
+
+
+          <!-- Application avatar -->
+
+          <div class="avatar">
+            SP
+          </div>
+
+        </div>
+
+      </header>
+
+
+      <!-- ===================================================
+           STATISTICS
+           =================================================== -->
+
+      <section class="stats">
+
+        <div class="stat-card">
+
+          <div class="stat-icon blue">
+            👥
+          </div>
+
+          <div>
+
+            <span>Total Students</span>
+
+            <strong id="totalStudents">
+              0
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <div class="stat-icon green">
+            ✓
+          </div>
+
+          <div>
+
+            <span>Present Today</span>
+
+            <strong id="presentCount">
+              0
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <div class="stat-icon orange">
+            ◷
+          </div>
+
+          <div>
+
+            <span>Attendance Rate</span>
+
+            <strong id="attendanceRate">
+              0%
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <div class="stat-icon purple">
+            ⚡
+          </div>
+
+          <div>
+
+            <span>Last Scan</span>
+
+            <strong id="lastScan">
+              --:--
+            </strong>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ===================================================
+           MAIN DASHBOARD GRID
+           =================================================== -->
+
+      <section class="dashboard-grid">
+
+
+        <!-- =================================================
+             FINGERPRINT SCANNER
+             ================================================= -->
+
+        <div class="scanner-card">
+
+          <div class="card-header">
+
+            <div>
+
+              <h2>
+                Fingerprint Attendance
+              </h2>
+
+              <p>
+                Waiting for fingerprint verification
+              </p>
+
+            </div>
+
+
+            <span class="live-badge">
+
+              <span></span>
+
+              LIVE
+
+            </span>
+
+          </div>
+
+
+          <div class="scanner-area">
+
+            <div class="fingerprint">
+
+              <div class="fingerprint-icon">
+                🖐
+              </div>
+
+            </div>
+
+
+            <h3 id="scannerTitle">
+              Attendance closed
+            </h3>
+
+
+            <p id="scannerMessage">
+              Start an attendance session before scanning fingerprints.
+            </p>
+
+
+            <div
+              class="scanner-loader hidden"
+              id="scannerLoader"
+            >
+
+              <div></div>
+
+            </div>
+
+          </div>
+
+
+          <!-- Student result -->
+
+          <div
+            class="student-result hidden"
+            id="studentResult"
+          >
+
+            <div
+              class="student-avatar"
+              id="studentAvatar"
+            >
+              JD
+            </div>
+
+
+            <div class="student-info">
+
+              <span>
+                Attendance Recorded
+              </span>
+
+              <h3 id="studentName">
+                John John
+              </h3>
+
+              <p id="studentDetails">
+                STU001 • Computer Science
+              </p>
+
+            </div>
+
+
+            <div class="success-icon">
+              ✓
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- =================================================
+             TODAY'S ATTENDANCE
+             ================================================= -->
+
+        <div class="recent-card">
+
+          <div class="card-header">
+
+            <div>
+
+              <h2>
+                Today's Attendance
+              </h2>
+
+              <p>
+                Latest fingerprint scans
+              </p>
+
+            </div>
+
+
+            <button
+              class="view-btn"
+              type="button"
+              id="viewAllBtn"
+            >
+              View All
+            </button>
+
+          </div>
+
+
+          <div
+            class="attendance-list"
+            id="attendanceList"
+          >
+
+            <!-- Attendance rows are inserted by JavaScript -->
+
+
+            <div
+              class="empty-state"
+              id="emptyState"
+            >
+
+              <div>
+                🕐
+              </div>
+
+              <p>
+                No attendance recorded yet.
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+
+  <!-- =======================================================
+       JAVASCRIPT
+       ======================================================= -->
+
+  <script src="script.js"></script>
+
+</body>
+</html>

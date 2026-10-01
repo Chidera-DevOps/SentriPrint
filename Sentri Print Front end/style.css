@@ -1,0 +1,762 @@
+/* =========================================================
+   SENTRIPRINT - STUDENT ATTENDANCE DASHBOARD
+   ========================================================= */
+
+
+/* =========================================================
+   RESET & BASE
+   ========================================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+button {
+  font-family: inherit;
+}
+
+
+/* =========================================================
+   APP LAYOUT
+   ========================================================= */
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+
+/* =========================================================
+   SIDEBAR
+   ========================================================= */
+
+.sidebar {
+  width: 250px;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+}
+
+
+/* Logo */
+
+.logo {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+
+/* Navigation */
+
+.sidebar nav {
+  padding: 20px 14px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  margin-bottom: 6px;
+  border-radius: 9px;
+  text-decoration: none;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  transition: 0.2s ease;
+}
+
+.nav-item:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.nav-item.active {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+
+/* Sidebar bottom */
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  background: #22c55e;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connection-status strong {
+  display: block;
+  font-size: 12px;
+  color: #111827;
+}
+
+.connection-status small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+
+/* =========================================================
+   MAIN
+   ========================================================= */
+
+.main {
+  margin-left: 250px;
+  width: calc(100% - 250px);
+  padding: 30px;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.header h1 {
+  font-size: 25px;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.header p {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+
+/* Date */
+
+.date {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.date span {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.date strong {
+  font-size: 15px;
+  color: #374151;
+  margin-top: 3px;
+}
+
+
+/* Avatar */
+
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   ATTENDANCE CONTROLS
+   ========================================================= */
+
+.attendance-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.control-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.control-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.control-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+/* Start button */
+
+.start-btn {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.start-btn:hover:not(:disabled) {
+  background: #15803d;
+}
+
+
+/* Stop button */
+
+.stop-btn {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.stop-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+
+/* Reset button */
+
+.reset-btn {
+  background: #6b7280;
+  color: #ffffff;
+}
+
+.reset-btn:hover:not(:disabled) {
+  background: #4b5563;
+}
+
+
+/* =========================================================
+   STATISTICS
+   ========================================================= */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 25px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.stat-icon.blue {
+  background: #eff6ff;
+}
+
+.stat-icon.green {
+  background: #ecfdf5;
+}
+
+.stat-icon.orange {
+  background: #fff7ed;
+}
+
+.stat-icon.purple {
+  background: #f5f3ff;
+}
+
+.stat-card span {
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 5px;
+}
+
+.stat-card strong {
+  font-size: 21px;
+  color: #111827;
+}
+
+
+/* =========================================================
+   DASHBOARD GRID
+   ========================================================= */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 20px;
+}
+
+
+/* =========================================================
+   CARDS
+   ========================================================= */
+
+.scanner-card,
+.recent-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 22px;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.card-header h2 {
+  font-size: 15px;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.card-header p {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+
+/* =========================================================
+   LIVE BADGE
+   ========================================================= */
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 20px;
+  background: #ecfdf5;
+  color: #16a34a;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.live-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+
+/* =========================================================
+   SCANNER
+   ========================================================= */
+
+.scanner-area {
+  min-height: 310px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+}
+
+.fingerprint {
+  width: 105px;
+  height: 105px;
+  border-radius: 50%;
+  background: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.fingerprint-icon {
+  font-size: 48px;
+}
+
+.scanner-area h3 {
+  font-size: 17px;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.scanner-area p {
+  max-width: 330px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #9ca3af;
+}
+
+
+/* Scanner loader */
+
+.scanner-loader {
+  width: 100px;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 10px;
+  margin-top: 18px;
+  overflow: hidden;
+}
+
+.scanner-loader div {
+  width: 40%;
+  height: 100%;
+  background: #2563eb;
+  animation: loading 1s infinite ease-in-out;
+}
+
+@keyframes loading {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+
+/* =========================================================
+   STUDENT RESULT
+   ========================================================= */
+
+.student-result {
+  margin: 0 22px 22px;
+  padding: 15px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.student-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-info {
+  flex: 1;
+}
+
+.student-info > span {
+  font-size: 10px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.student-info h3 {
+  font-size: 13px;
+  color: #111827;
+  margin: 3px 0;
+}
+
+.student-info p {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.success-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   ATTENDANCE LIST
+   ========================================================= */
+
+.attendance-list {
+  max-height: 410px;
+  overflow-y: auto;
+}
+
+.attendance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 22px;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.attendance-row:last-child {
+  border-bottom: none;
+}
+
+.attendance-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.attendance-info {
+  flex: 1;
+}
+
+.attendance-info strong {
+  display: block;
+  font-size: 12px;
+  color: #111827;
+}
+
+.attendance-info span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.attendance-time {
+  font-size: 10px;
+  color: #6b7280;
+}
+
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.empty-state {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.empty-state div {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  font-size: 11px;
+}
+
+
+/* =========================================================
+   VIEW BUTTON
+   ========================================================= */
+
+.view-btn {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-btn:hover {
+  text-decoration: underline;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1100px) {
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+
+@media (max-width: 800px) {
+
+  .sidebar {
+    width: 70px;
+  }
+
+  .logo {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .logo span {
+    display: none;
+  }
+
+  .nav-item {
+    justify-content: center;
+    padding: 13px;
+  }
+
+  .nav-item span {
+    margin: 0;
+  }
+
+  .nav-item {
+    font-size: 0;
+  }
+
+  .nav-item span {
+    font-size: 16px;
+  }
+
+  .main {
+    margin-left: 70px;
+    width: calc(100% - 70px);
+    padding: 20px;
+  }
+
+  .header {
+    align-items: flex-start;
+  }
+
+  .header-right {
+    gap: 10px;
+  }
+
+  .date {
+    display: none;
+  }
+
+  .attendance-controls {
+    flex-wrap: wrap;
+  }
+
+}
+
+
+@media (max-width: 600px) {
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .attendance-controls {
+    width: 100%;
+  }
+
+  .control-btn {
+    flex: 1;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+

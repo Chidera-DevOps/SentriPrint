@@ -1,29 +1,69 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import sqlite3
 from datetime import datetime
 from typing import Optional
 
-app = FastAPI()
+
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
+
+app = FastAPI(title="SentriPrint API")
+
+
+# Allow the SentriPrint frontend to communicate with the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# =========================================================
+# DATABASE CONFIGURATION
+# =========================================================
 
 DATABASE = "sentriprint.db"
 
-# Tracks whether an attendance period is currently open.
+
+# =========================================================
+# ATTENDANCE SESSION STATE
+# =========================================================
+
+# Determines whether an attendance session is currently open.
 attendance_active = False
 
-# Stores when the current attendance period started.
+# Stores the time the current attendance session started.
 attendance_start_time = None
 
-# Stores students who have already attended in the
-# current attendance period to prevent duplicates.
+# Stores the student IDs that have already attended
+# during the current attendance session.
 current_attendees = set()
 
 
+# =========================================================
+# DATABASE INITIALIZATION
+# =========================================================
+
 def create_database():
+    """
+    Create the required database tables if they do not exist.
+
+    IMPORTANT:
+    This does NOT delete existing data.
+    """
+
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
-    # Stores registered students and their fingerprints.
+    # -----------------------------------------------------
+    # Students table
+    # -----------------------------------------------------
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +76,10 @@ def create_database():
         )
     """)
 
-    # Stores attendance records.
+    # -----------------------------------------------------
+    # Attendance table
+    # -----------------------------------------------------
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,10 +94,22 @@ def create_database():
     connection.close()
 
 
+# Create the database/tables when the API starts.
+#
+# IMPORTANT:
+# This does NOT delete existing data.
 create_database()
 
 
+# =========================================================
+# PYDANTIC MODELS
+# =========================================================
+
 class Student(BaseModel):
+    """
+    Information required to register a student.
+    """
+
     student_id: str
     name: str
     department: Optional[str] = None
@@ -63,35 +118,68 @@ class Student(BaseModel):
 
 
 class Attendance(BaseModel):
-    # The fingerprint ID returned by the AS608.
+    """
+    Information sent by the ESP32 when a fingerprint
+    has been successfully identified.
+    """
+
+    # Fingerprint ID returned by the AS608.
     fingerprint_id: int
 
-    # Identifies which SentriPrint device sent the scan.
+    # ID of the SentriPrint device.
     device_id: str
+
+
+# =========================================================
+# HOME
+# =========================================================
 
 @app.get("/")
 def home():
+    """
+    Check whether the SentriPrint API is running.
+    """
+
     return {
         "message": "SentriPrint API is working"
     }
 
 
+# =========================================================
+# START ATTENDANCE
+# =========================================================
+
 @app.post("/attendance/start")
 def start_attendance():
+    """
+    Open a new attendance session.
+    """
+
     global attendance_active
     global attendance_start_time
     global current_attendees
 
+    # -----------------------------------------------------
+    # Prevent two sessions from being active simultaneously.
+    # -----------------------------------------------------
+
     if attendance_active:
+
         raise HTTPException(
             status_code=409,
             detail="Attendance is already active"
         )
 
+    # -----------------------------------------------------
+    # Open attendance session.
+    # -----------------------------------------------------
+
     attendance_active = True
+
+    # Record session start time.
     attendance_start_time = datetime.now().isoformat()
 
-    # Start a fresh attendance period.
+    # Start with an empty attendee list.
     current_attendees.clear()
 
     return {
@@ -100,31 +188,55 @@ def start_attendance():
         "started_at": attendance_start_time
     }
 
+
+# =========================================================
+# STOP ATTENDANCE
+# =========================================================
+
 @app.post("/attendance/stop")
 def stop_attendance():
+    """
+    Close the current attendance session.
+    """
+
     global attendance_active
     global attendance_start_time
     global current_attendees
 
-    # Make sure there is an active attendance session to stop.
+    # -----------------------------------------------------
+    # Make sure a session is currently active.
+    # -----------------------------------------------------
+
     if not attendance_active:
+
         raise HTTPException(
             status_code=409,
             detail="Attendance is not currently active"
         )
 
+    # -----------------------------------------------------
+    # Record stop time.
+    # -----------------------------------------------------
+
     stopped_at = datetime.now().isoformat()
 
-    # Count everyone who attended this session.
+    # Count students who attended.
     total_attendees = len(current_attendees)
 
-    # Close the attendance session.
+    # -----------------------------------------------------
+    # Close session.
+    # -----------------------------------------------------
+
     attendance_active = False
     attendance_start_time = None
 
-    # Clear the temporary attendee list.
-    # The actual attendance records remain safely stored
-    # in the SQLite database.
+    # -----------------------------------------------------
+    # Clear temporary session list.
+    #
+    # IMPORTANT:
+    # Actual attendance records remain in SQLite.
+    # -----------------------------------------------------
+
     current_attendees.clear()
 
     return {
@@ -135,32 +247,173 @@ def stop_attendance():
     }
 
 
-@app.post("/attendance")
-def record_attendance(attendance: Attendance):
+# =========================================================
+# ATTENDANCE STATUS
+# =========================================================
 
-    # ---------------------------------------------------------
-    # 1. Make sure an attendance session is currently active.
-    # ---------------------------------------------------------
+@app.get("/attendance/status")
+def attendance_status():
+    """
+    Check the current attendance session.
+    """
+
+    return {
+        "status": "success",
+        "attendance_active": attendance_active,
+        "started_at": attendance_start_time,
+        "students_recorded": len(current_attendees)
+    }
+
+
+# =========================================================
+# CURRENT ATTENDANCE
+# =========================================================
+
+@app.get("/attendance/current")
+def get_current_attendance():
+    """
+    Return attendance records for the current session.
+
+    This uses the student IDs stored in current_attendees
+    and retrieves their attendance records from SQLite.
+    """
+
+    # -----------------------------------------------------
+    # 1. Make sure an attendance session is active.
+    # -----------------------------------------------------
+
     if not attendance_active:
+
         raise HTTPException(
             status_code=403,
             detail="Attendance is currently closed"
         )
 
-    # ---------------------------------------------------------
-    # 2. Connect to the database.
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
+    # 2. If nobody has attended yet, return an empty list.
+    # -----------------------------------------------------
+
+    if not current_attendees:
+
+        return {
+            "status": "success",
+            "count": 0,
+            "attendance": []
+        }
+
+    # -----------------------------------------------------
+    # 3. Connect to SQLite.
+    # -----------------------------------------------------
+
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
     try:
 
-        # -----------------------------------------------------
-        # 3. Find the student associated with this fingerprint.
-        #
-        # The ESP32 does NOT send the student's ID.
-        # It only sends the fingerprint ID returned by AS608.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # Build placeholders for the SQL IN clause.
+        # -------------------------------------------------
+
+        placeholders = ",".join(
+            ["?"] * len(current_attendees)
+        )
+
+        cursor.execute(
+            f"""
+            SELECT
+                id,
+                student_id,
+                fingerprint_id,
+                device_id,
+                timestamp
+            FROM attendance
+            WHERE student_id IN ({placeholders})
+            ORDER BY timestamp DESC
+            """,
+            tuple(current_attendees)
+        )
+
+        rows = cursor.fetchall()
+
+    finally:
+
+        connection.close()
+
+    # -----------------------------------------------------
+    # 4. Convert database rows into JSON objects.
+    # -----------------------------------------------------
+
+    records = []
+
+    for row in rows:
+
+        records.append({
+            "id": row[0],
+            "student_id": row[1],
+            "fingerprint_id": row[2],
+            "device_id": row[3],
+            "timestamp": row[4]
+        })
+
+    # -----------------------------------------------------
+    # 5. Return current attendance.
+    # -----------------------------------------------------
+
+    return {
+        "status": "success",
+        "count": len(records),
+        "attendance": records
+    }
+
+
+# =========================================================
+# RECORD ATTENDANCE
+# =========================================================
+
+@app.post("/attendance")
+def record_attendance(attendance: Attendance):
+    """
+    Record attendance using the fingerprint ID.
+
+    Flow:
+
+        AS608
+          ↓
+        ESP32
+          ↓
+        fingerprint_id
+          ↓
+        FastAPI
+          ↓
+        Find student
+          ↓
+        Save attendance
+    """
+
+    # -----------------------------------------------------
+    # 1. Check whether attendance is active.
+    # -----------------------------------------------------
+
+    if not attendance_active:
+
+        raise HTTPException(
+            status_code=403,
+            detail="Attendance is currently closed"
+        )
+
+    # -----------------------------------------------------
+    # 2. Connect to SQLite.
+    # -----------------------------------------------------
+
+    connection = sqlite3.connect(DATABASE)
+    cursor = connection.cursor()
+
+    try:
+
+        # -------------------------------------------------
+        # 3. Find student using fingerprint ID.
+        # -------------------------------------------------
+
         cursor.execute("""
             SELECT
                 student_id,
@@ -174,38 +427,46 @@ def record_attendance(attendance: Attendance):
 
         student = cursor.fetchone()
 
-        # -----------------------------------------------------
-        # 4. If no student is associated with that fingerprint,
-        # reject the attendance attempt.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 4. Reject unknown fingerprint.
+        # -------------------------------------------------
+
         if student is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Fingerprint is not registered to a student"
             )
 
+        # -------------------------------------------------
+        # Extract student information.
+        # -------------------------------------------------
+
         student_id = student[0]
         fingerprint_id = student[1]
         name = student[2]
 
-        # -----------------------------------------------------
-        # 5. Prevent the same student from recording attendance
-        # twice during the same attendance session.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 5. Prevent duplicate attendance.
+        # -------------------------------------------------
+
         if student_id in current_attendees:
+
             raise HTTPException(
                 status_code=409,
                 detail="Student has already recorded attendance for this period"
             )
 
-        # -----------------------------------------------------
-        # 6. Create the attendance timestamp.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 6. Generate timestamp.
+        # -------------------------------------------------
+
         timestamp = datetime.now().isoformat()
 
-        # -----------------------------------------------------
-        # 7. Save the attendance record.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 7. Insert attendance record.
+        # -------------------------------------------------
+
         cursor.execute("""
             INSERT INTO attendance (
                 student_id,
@@ -221,19 +482,22 @@ def record_attendance(attendance: Attendance):
             timestamp
         ))
 
+        # Save the record.
         connection.commit()
 
+        # Get the newly created attendance ID.
         attendance_id = cursor.lastrowid
 
-        # -----------------------------------------------------
-        # 8. Mark this student as present for the current
-        # attendance session.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 8. Add student to current session.
+        # -------------------------------------------------
+
         current_attendees.add(student_id)
 
-        # -----------------------------------------------------
-        # 9. Return the student's information to the ESP32.
-        # -----------------------------------------------------
+        # -------------------------------------------------
+        # 9. Return successful response.
+        # -------------------------------------------------
+
         return {
             "status": "success",
             "message": "Attendance recorded successfully",
@@ -248,24 +512,102 @@ def record_attendance(attendance: Attendance):
         }
 
     finally:
+
+        # Always close database connection.
         connection.close()
 
-@app.get("/attendance/status")
-def attendance_status():
-    return {
-        "status": "success",
-        "attendance_active": attendance_active,
-        "started_at": attendance_start_time,
-        "students_recorded": len(current_attendees)
-    }
 
+# =========================================================
+# RESET ALL ATTENDANCE
+# =========================================================
 
-@app.post("/students")
-def register_student(student: Student):
+@app.delete("/attendance/reset")
+def reset_attendance():
+    """
+    Delete ALL stored attendance records.
+
+    IMPORTANT:
+    - Students are NOT deleted.
+    - Fingerprint registrations are NOT affected.
+    - Only the attendance table is cleared.
+
+    This endpoint cannot be used while an attendance
+    session is active.
+    """
+
+    # -----------------------------------------------------
+    # 1. Prevent resetting a live attendance session.
+    # -----------------------------------------------------
+
+    if attendance_active:
+
+        raise HTTPException(
+            status_code=409,
+            detail="Stop the current attendance session before resetting attendance"
+        )
+
+    # -----------------------------------------------------
+    # 2. Connect to SQLite.
+    # -----------------------------------------------------
+
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
     try:
+
+        # -------------------------------------------------
+        # Count existing records before deleting them.
+        # -------------------------------------------------
+
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM attendance
+        """)
+
+        deleted_count = cursor.fetchone()[0]
+
+        # -------------------------------------------------
+        # Delete all attendance records.
+        # -------------------------------------------------
+
+        cursor.execute("""
+            DELETE FROM attendance
+        """)
+
+        connection.commit()
+
+    finally:
+
+        connection.close()
+
+    # -----------------------------------------------------
+    # 3. Reset temporary session state as well.
+    # -----------------------------------------------------
+
+    current_attendees.clear()
+
+    return {
+        "status": "success",
+        "message": "All attendance records have been reset",
+        "deleted_count": deleted_count
+    }
+
+
+# =========================================================
+# REGISTER STUDENT
+# =========================================================
+
+@app.post("/students")
+def register_student(student: Student):
+    """
+    Register a new student.
+    """
+
+    connection = sqlite3.connect(DATABASE)
+    cursor = connection.cursor()
+
+    try:
+
         cursor.execute("""
             INSERT INTO students (
                 student_id,
@@ -294,39 +636,55 @@ def register_student(student: Student):
         }
 
     except sqlite3.IntegrityError:
+
         raise HTTPException(
             status_code=409,
             detail="Student ID or Fingerprint ID already exists"
         )
 
     finally:
+
         connection.close()
 
 
+# =========================================================
+# GET ALL STUDENTS
+# =========================================================
+
 @app.get("/students")
 def get_students():
+    """
+    Return all registered students.
+    """
+
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
-    cursor.execute("""
-        SELECT
-            id,
-            student_id,
-            name,
-            department,
-            level,
-            fingerprint_id,
-            created_at
-        FROM students
-        ORDER BY id DESC
-    """)
+    try:
 
-    rows = cursor.fetchall()
-    connection.close()
+        cursor.execute("""
+            SELECT
+                id,
+                student_id,
+                name,
+                department,
+                level,
+                fingerprint_id,
+                created_at
+            FROM students
+            ORDER BY id DESC
+        """)
+
+        rows = cursor.fetchall()
+
+    finally:
+
+        connection.close()
 
     students = []
 
     for row in rows:
+
         students.append({
             "id": row[0],
             "student_id": row[1],
@@ -344,121 +702,44 @@ def get_students():
     }
 
 
-@app.post("/attendance")
-def record_attendance(attendance: Attendance):
-
-    # Attendance can only be recorded during an
-    # active attendance period.
-    if not attendance_active:
-        raise HTTPException(
-            status_code=403,
-            detail="Attendance is currently closed"
-        )
-
-    # Prevent the same student from attending twice
-    # during the current attendance period.
-    if attendance.student_id in current_attendees:
-        raise HTTPException(
-            status_code=409,
-            detail="Student has already recorded attendance for this period"
-        )
-
-    connection = sqlite3.connect(DATABASE)
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT
-            student_id,
-            fingerprint_id,
-            name
-        FROM students
-        WHERE student_id = ?
-    """, (
-        attendance.student_id,
-    ))
-
-    student = cursor.fetchone()
-
-    if student is None:
-        connection.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail="Student is not registered"
-        )
-
-    # Verify that the fingerprint belongs to the student.
-    registered_fingerprint_id = student[1]
-
-    if registered_fingerprint_id != attendance.fingerprint_id:
-        connection.close()
-
-        raise HTTPException(
-            status_code=403,
-            detail="Fingerprint does not match student"
-        )
-
-    timestamp = datetime.now().isoformat()
-
-    cursor.execute("""
-        INSERT INTO attendance (
-            student_id,
-            fingerprint_id,
-            device_id,
-            timestamp
-        )
-        VALUES (?, ?, ?, ?)
-    """, (
-        attendance.student_id,
-        attendance.fingerprint_id,
-        attendance.device_id,
-        timestamp
-    ))
-
-    connection.commit()
-
-    attendance_id = cursor.lastrowid
-
-    connection.close()
-
-    # Mark the student as present for this period.
-    current_attendees.add(attendance.student_id)
-
-    return {
-        "status": "success",
-        "message": "Attendance recorded successfully",
-        "attendance_id": attendance_id,
-        "data": {
-            "student_id": attendance.student_id,
-            "fingerprint_id": attendance.fingerprint_id,
-            "device_id": attendance.device_id,
-            "timestamp": timestamp
-        }
-    }
-
+# =========================================================
+# GET ATTENDANCE HISTORY
+# =========================================================
 
 @app.get("/attendance")
 def get_attendance():
+    """
+    Return all attendance records.
+
+    This includes records from previous attendance sessions.
+    """
+
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
-    cursor.execute("""
-        SELECT
-            id,
-            student_id,
-            fingerprint_id,
-            device_id,
-            timestamp
-        FROM attendance
-        ORDER BY timestamp DESC
-    """)
+    try:
 
-    rows = cursor.fetchall()
-    connection.close()
+        cursor.execute("""
+            SELECT
+                id,
+                student_id,
+                fingerprint_id,
+                device_id,
+                timestamp
+            FROM attendance
+            ORDER BY timestamp DESC
+        """)
+
+        rows = cursor.fetchall()
+
+    finally:
+
+        connection.close()
 
     records = []
 
     for row in rows:
+
         records.append({
             "id": row[0],
             "student_id": row[1],
